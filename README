@@ -1,0 +1,20 @@
+This is a mirror of http://www.vim.org/scripts/script.php?script_id=2213
+
+The Test Anything Protocol makes testing with different languages in the same project
+easy. It decouples the tests generating results from the harness interpreting the results.
+With VimTAP we now have TAP for vim.
+
+For now the following is implemented:
+ - Plan
+ - Ok
+ - Is & Isnt
+ - Like & Unlike
+ - Diag
+
+Diag is probably not completely functional, yet. \n, \r and \r\n are all considered to
+delimit lines.
+
+Also a driver for running the tests from outside vim is provided. It can be used with
+Perl's TAP::Parser runtests utility.
+
+This package is still work in progress!
