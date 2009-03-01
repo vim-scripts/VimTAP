@@ -1,7 +1,7 @@
 
-			    VimTAP
+                            VimTAP
 
-					    *VimTAP*
+                                            *VimTAP*
 
 VimTAP is an implementation of the Test Anything Protocol for Vim. It is
 intended to provide an easy way to test your Vim scripts and functions.
@@ -13,17 +13,22 @@ producers and consumers of the test protocol data.
 ==============================================================================
 CONTENTS
 
-1. The Plan				    |vimtap#Plan|
-2. Ok: the simple way			    |vimtap#Ok|
-3. Is: more information			    |vimtap#Is|
-4. Isnt: turn the tides			    |vimtap#Isnt|
-5. Like: more fuzzyness needed?		    |vimtap#Like|
-6. Unlike: avoid the anti-patterns	    |vimtap#Unlike|
-7. Diag: It hurts, Doctor!		    |vimtap#Diag|
-8. License				    |VimTAPLicense|
+ 1. The Plan                                |vimtap#Plan|
+ 2. Ok: the simple way                      |vimtap#Ok|
+ 3. Is: more information                    |vimtap#Is|
+ 4. Isnt: turn the tides                    |vimtap#Isnt|
+ 5. Like: more fuzzyness needed?            |vimtap#Like|
+ 6. Unlike: avoid the anti-patterns         |vimtap#Unlike|
+ 7. Pass & Fail: nomen est omen             |vimtap#Pass| |vimtap#Fail|
+ 8. Diag: It hurts, Doctor!                 |vimtap#Diag|
+ 9. Skip: don't feel like it                |vimtap#Skip|
+10. Todo: work in progress                  |vimtap#Todo|
+11. Bail Out: pull the rip cord             |vimtap#Bailout|
+12. Output: Put it over here                |vimtap#SetOutputFile|
+13. License                                 |VimTAPLicense|
 ==============================================================================
 
-1. The Plan				    *vimtap#Plan*
+ 1. The Plan                                *vimtap#Plan*
 
 vimtap#Plan(number_of_tests)
 
@@ -34,12 +39,12 @@ stop somewhere in the middle.
 TAP allows the plan also to follow the actual test output, but this
 should be rarely needed. Providing the plan beforehand is better. >
 
-	" Plan to run 4 tests.
-	call vimtap#Plan(4)
+        " Plan to run 4 tests.
+        call vimtap#Plan(4)
 <
 ==============================================================================
 
-2. Ok: the simple way			    *vimtap#Ok*
+ 2. Ok: the simple way                      *vimtap#Ok*
 
 vimtap#Ok(test_result, description)
 
@@ -50,12 +55,12 @@ sees the result, Ok cannot tell you, why the result is like it is.
 The description (as it maybe given to any test function) is used to identify
 the test in the output. >
 
-	call vimtap#Ok(x == y, "x is equal to y")
-	call vimtap#Ok(IsFoo(x), "x is Foo")
+        call vimtap#Ok(x == y, "x is equal to y")
+        call vimtap#Ok(IsFoo(x), "x is Foo")
 <
 ==============================================================================
 
-3. Is: more information			    *vimtap#Is*
+ 3. Is: more information                    *vimtap#Is*
 
 vimtap#Is(got, expected, description)
 
@@ -65,11 +70,11 @@ than Ok in case the test fails. Then it prints the expected value as well
 as the actual one in order to give the developer more hints, why the test
 actually failed. >
 
-	call vimtap#Is(x, "good value", "x is a good value")
+        call vimtap#Is(x, "good value", "x is a good value")
 <
 ==============================================================================
 
-4. Isnt: turn the tides			    *vimtap#Isnt*
+ 4. Isnt: turn the tides                    *vimtap#Isnt*
 
 vimtap#Isnt(got, unexpected, description)
 
@@ -77,33 +82,50 @@ Sometimes there are values, which you don't want to see as a result of a
 computation. This can be tested with Isnt. The actual value has to be
 different from the given reference value for the test to succeed. >
 
-	call vimtap#Isnt(x, "bad value", "x is not a bad value")
+        call vimtap#Isnt(x, "bad value", "x is not a bad value")
 <
 ==============================================================================
 
-5. Like: more fuzziness needed?		    *vimtap#Like*
+ 5. Like: more fuzziness needed?            *vimtap#Like*
 
 vimtap#Like(got, regular expression, description)
 
 When you don't expect a certain value, but a result of a certain structure
 you can also use Like to test the result against a given regular expression. >
 
-	call vimtap#Like(x, '^\d$', "x is a digit")
+        call vimtap#Like(x, '^\d$', "x is a digit")
 <
 ==============================================================================
 
-6. Unlike				    *vimtap#Unlike*
+ 6. Unlike: avoid the anti-patterns         *vimtap#Unlike*
 
 vimtap#Unlike(got, regular expression, description)
 
 As with Is and Isnt, you might want to test, that a result doesn't contain
 some unwanted anti-patterns. >
 
-	call vimtap#Unlike(x, '^\s*$', "x does contain non-whitespace")
+        call vimtap#Unlike(x, '^\s*$', "x does contain non-whitespace")
 <
 ==============================================================================
 
-7. Diag: It hurts, Doctor!		    *vimtap#Diag*
+ 7. Pass & Fail: nomen est omen             *vimtap#Pass* *vimtap#Fail*
+
+vimtap#Pass(description)
+vimtap#Fail(description)
+
+Pass and Fail don't check any condition, but do what the say. It is useful
+when reaching a certain point in the control flow defines whether a test
+failed or not. >
+
+        if (SomeConditionHolds())
+                call vimtap#Ok(SomeSpecialCase(), "check some special case")
+        else
+                call vimtap#Fail("we already lost")
+        endif
+<
+==============================================================================
+
+ 8. Diag: It hurts, Doctor!                 *vimtap#Diag*
 
 vimtap#Diag(diagnostic message)
 
@@ -111,15 +133,95 @@ From time to time one may want to print some diagnostic output. This has to
 be prefixed by '#' to conform to TAP. But Diag to the rescue: it takes of
 this for you. >
 
-	call vimtap#Diag("Testing now this and that feature...")
+        call vimtap#Diag("Testing now this and that feature...")
 <
 Note: For now \n, \r and \r\n are all considered to delimit lines.
 
 ==============================================================================
 
-8. License				    *VimTAPLicense*
+ 9. Skip: don't feel like it                *vimtap#Skip*
 
-Copyright (c) 2008 Meikel Brandmeyer, Frankfurt am Main
+vimtap#Skip(num_skipped, guard, reason)
+
+There are times, where we don't want to run some tests. This is possibly
+the case, when it needs some optional feature, like perl support, or
+some third-party plugin, which might not be there.
+
+Then we can easily specify a guard, which tells us, whether to skip the
+tests or not. If the guard is true, we run the tests, otherwise Skip
+takes care of skipping the tests giving the apropriate reason.
+
+Since the tests are not run, we obviously must tell Skip the number of
+skipped tests. Otherwise our plan would be wrong. >
+
+        if (!vimtap#Skip(2, has("perl"), "need Perl support"))
+                call vimtap#Ok(SomeFunctionUsingPerl(), "some perl function")
+                call vimtap#Ok(SomeOtherPerlStuff(), "other perl stuff")
+        endif
+<
+==============================================================================
+
+10. Todo: work in progress                  *vimtap#Todo*
+
+vimtap#Todo(num_todos)
+
+Another useful pragma is Todo. We tell the system that a certain number
+of the following tests are currently not backed up by real, fully
+functional code, yet. So the tests are run, but a failure doesn't make
+the whole suite fail.
+
+The "normal" harnesses like prove or runtests also specially mark "Todo"
+tests, which suddenly succeed! >
+
+        call vimtap#Todo(1)
+        call vimtap#Ok(Frob(foo), "frobnicate the foo")
+<
+This test code might result in a failure: >
+
+        not ok 1 # TODO frobnicate the foo
+<
+However, since the test is marked by the todo pragma the suite might
+still succeed.
+
+==============================================================================
+
+11. BailOut: pull the rip cord              *vimtap#BailOut*
+
+vimtap#BailOut(reason)
+
+When something happens, which makes further testing impossible, it is
+possible to pull the rip cord and bail out of the test. Any execution
+is abandoned immediately. >
+
+        if (!RunningInVim())
+                call vimtap#BailOut("Running in emacs! Iek!")
+        endif
+<
+Note: This is implemented using the a "VimTAP:BailOut" exception. Catch
+these and all the devils of the lowwer hells will come to haunt you!
+
+==============================================================================
+
+12. Output: Put it over here                *vimtap#SetOutputFile*
+
+vimtap#SetOutputFile("somefile.txt")
+vimtap#FlushOutput()
+
+You may use SetOutputFile to specify a file, where the TAP output
+and the diagnostics are written. If you don't use the supplied
+wrapper to run tests, you have to call vimtap#FlushOutput() after
+the test script is run to trigger writing to the file. This is an
+unfortunate limitation of Vim. >
+
+        call vimtap#SetOutputFile("somefile.txt")
+        " testestest...
+        call vimtap#FlushOutput()
+<
+==============================================================================
+
+13. License                                 *VimTAPLicense*
+
+Copyright (c) 2008,2009 Meikel Brandmeyer, Frankfurt am Main
 
 All rights reserved.
 
@@ -142,4 +244,4 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
 ==============================================================================
-vim: ft=help:norl:ts=8:tw=78
+vim: ft=help:norl:ts=8:tw=78:et:

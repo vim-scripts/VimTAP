@@ -1,5 +1,5 @@
 #! /bin/sh
-# Copyright (c) 2008 Meikel Brandmeyer, Frankfurt am Main
+# Copyright (c) 2008,2009 Meikel Brandmeyer, Frankfurt am Main
 # 
 # All rights reserved.
 # 
@@ -32,13 +32,20 @@ if [ $# -ne 1 ]; then
 fi
 
 test=$1
+testoutput=`mktemp -t vimtap`
 
-vim -e ${test}.output <<EOF
+# XXX: In the following there is no need to "catch" the BailOut exception,
+# since vim reads from stdin. That means that each command comprises and own
+# "run", which is isolated from the others. If we would put the commands in
+# separate file and :source'd it, we would have needed the "catch".
+vim -E <<EOF
+call vimtap#SetOutputFile("${testoutput}")
 source ${test}
-normal Gdd
-w
-q
+call vimtap#FlushOutput()
+qa!
 EOF
-cat ${test}.output
-rm -f ${test}.output
+
+cat ${testoutput}
+
+rm -f ${testoutput}
 
