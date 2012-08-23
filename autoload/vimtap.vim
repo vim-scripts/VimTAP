@@ -1,11 +1,11 @@
 "##### HEADER [ {{{ ]
 " Plugin:       VimTAP
-" Version:      0.3
+" Version:      0.4.0-SNAPSHOT
 " Author:       Meikel Brandmeyer <mb@kotka.de>
 " Created:      Sat Apr 12 20:53:41 2008
 "
 " License:
-" Copyright (c) 2008,2009 Meikel Brandmeyer, Frankfurt am Main
+" Copyright (c) 2008-2012 Meikel Brandmeyer, Frankfurt am Main
 " 
 " All rights reserved.
 " 
@@ -105,13 +105,24 @@ function! vimtap#StandardHarness.ok(test_result, description) dict
 				\ ? self.test_failed : 1
 
 	if self.todos > 0
-		let desc = printf("# TODO %s", a:description)
+		let desc = "# TODO"
+		if a:description != ""
+			let desc .= " " . a:description
+		endif
 		let self.todos = self.todos - 1
 	else
-		let desc = printf("- %s", a:description)
+		if a:description != ""
+			let desc = printf("- %s", a:description)
+		else
+			let desc = ""
+		endif
 	endif
 
-	call self.print("%s %d %s", result, self.test, desc)
+	let result .= " " . self.test
+	if desc != ""
+		let result .= " " . desc
+	endif
+	call self.print(result)
 
 	let self.test = self.test + 1
 endfunction
@@ -234,10 +245,53 @@ endfunction
 " Source:
 function! vimtap#Quote(expr)
 	if type(a:expr) == type("")
-		return strtrans(a:expr)
+		return "\"" . escape(strtrans(a:expr), '\"') . "\""
 	else
 		return string(a:expr)
 	endif
+endfunction
+"### [ }}} ]
+"### FUNCTION vimtap#ParseExpression [ {{{ ]
+" Description:
+" Parse the argument of a command as per <q-args>. An expression is either
+" delimited by whitespace or by parens. Leading whitespace is removed.
+"
+" Returns:
+" A list of the expression and the remaining parts of the input.
+"
+" TODO:
+" Get a real parser. Delimiters eg. in strings can be tricky.
+"
+" Source:
+function! vimtap#ParseExpression(input)
+	let input = substitute(a:input, '^\s\+', '', '')
+	if input[0] == '('
+		return matchlist(input, '^\((.\{-})\)\(.*\)$')[1:2]
+	elseif input[0] == '['
+		return matchlist(input, '^\(\[.\{-}\]\)\(.*\)$')[1:2]
+	elseif input[0] == '{'
+		return matchlist(input, '^\({.\{-}}\)\(.*\)$')[1:2]
+	elseif input[0] == '"'
+		return matchlist(input, '^\("\%(\\[\"]\|[^\"]\)\{-}"\)\(.*\)$')[1:2]
+	elseif input[0] == "'"
+		return matchlist(input, '^\(''\%(\\[\'']\|[^\'']\)\{-}''\)\(.*\)$')[1:2]
+	else
+		return matchlist(input, '^\(\S\+\)\(.*\)$')[1:2]
+	endif
+endfunction
+"### [ }}} ]
+"### FUNCTION vimtap#ParseDescription [ {{{ ]
+" Description:
+" Parse the argument of a command as per <q-args>. The description is
+" simply the remaining part of the input without a any leading whitespace.
+"
+" Source:
+function! vimtap#ParseDescription(input)
+	let input = substitute(a:input, '^\s\+', '', '')
+	if input[0] == '"' || input[0] == "'"
+		return vimtap#ParseExpression(input)[0]
+	endif
+	return '""'
 endfunction
 "### [ }}} ]
 "### FUNCTION vimtap#SetOutputFile [ {{{ ]
@@ -278,12 +332,18 @@ endfunction
 " to the test line.
 "
 " Example:
-"   call vimtap#Ok(x == y, "x is equal to y")
-"   call vimtap#Ok(IsFoo(x), "x is Foo")
+"   call vimtap#Ok(x == y, 'x == y', "x is equal to y")
+"   call vimtap#Ok(IsFoo(x), 'IsFoo(x)', "x is Foo")
 "
 " Source:
-function! vimtap#Ok(test_result, description)
+function! vimtap#Ok(test_result, qtest, description)
 	call g:vimtap#TheHarness.ok(a:test_result, a:description)
+	if !a:test_result
+		call vimtap#Diag("Test '%s' failed:\n"
+					\ . "expected: %s\n"
+					\ . "to be true, but got false.",
+					\ a:description, a:qtest)
+	endif
 endfunction
 "### [ }}} ]
 "### FUNCTION vimtap#Is [ {{{ ]
@@ -293,18 +353,22 @@ endfunction
 " test failed than it is possible for Ok.
 "
 " Example:
-"   call vimtap#Is(x, y, "x is equal to y")
+"   call vimtap#Is(x, y, qx, "x is equal to y")
+"
+" qx is the quoted expression which gives raise to x.
 "
 " Source:
-function! vimtap#Is(got, exp, description)
+function! vimtap#Is(got, exp, qgot, description)
 	let test_result = a:got == a:exp
 
-	call vimtap#Ok(test_result, a:description)
+	call g:vimtap#TheHarness.ok(test_result, a:description)
 	if !test_result
 		call vimtap#Diag("Test '%s' failed:\n"
-					\ . "expected: '%s'\n"
-					\ . "but got:  '%s'",
-					\ a:description, vimtap#Quote(a:exp), vimtap#Quote(a:got))
+					\ . "expected: %s\n"
+					\ . "to be:    %s\n"
+					\ . "but got:  %s",
+					\ a:description, a:qgot, vimtap#Quote(a:exp),
+					\ vimtap#Quote(a:got))
 	endif
 endfunction
 "### [ }}} ]
@@ -314,39 +378,41 @@ endfunction
 " supplied one.
 "
 " Example:
-"   call vimtap#Isnt(x, y, "x is not equal to y")
+"   call vimtap#Isnt(x, y, 'x', "x is not equal to y")
 "
 " Source:
-function! vimtap#Isnt(got, unexp, description)
+function! vimtap#Isnt(got, unexp, qgot, description)
 	let test_result = a:got != a:unexp
 
-	call vimtap#Ok(test_result, a:description)
+	call g:vimtap#TheHarness.ok(test_result, a:description)
 	if !test_result
 		call vimtap#Diag("Test '%s' failed:\n"
-					\ . "got unexpected: '%s'",
-					\ a:description, vimtap#Quote(a:got))
+					\ . "expected: %s\n"
+					\ . "to be different from: %s",
+					\ a:description, a:qgot, vimtap#Quote(a:got))
 	endif
 endfunction
 "### [ }}} ]
 "### FUNCTION vimtap#Like [ {{{ ]
 " Description:
-" Like is similar to Is, but the it uses a regular expression which is matched
+" Like is similar to Is, but it uses a regular expression which is matched
 " against the passed in value. If the value matches the regular expression,
 " then the test succeeds.
 "
 " Example:
-"   call vimtap#Like(x, '\d\d', "x has two-digit number")
+"   call vimtap#Like(x, '\d\d', 'x', "x has two-digit number")
 "
 " Source:
-function! vimtap#Like(got, re, description)
+function! vimtap#Like(got, re, qgot, description)
 	let test_result = a:got =~ a:re
 
-	call vimtap#Ok(test_result, a:description)
+	call g:vimtap#TheHarness.ok(test_result, a:description)
 	if !test_result
 		call vimtap#Diag("Test '%s' failed:\n"
-					\ . "got: '%s'\n"
-					\ . "does not match: /%s/",
-					\ a:description, vimtap#Quote(a:got), a:re)
+					\ . "expected:   %s\n"
+					\ . "with value: %s\n"
+					\ . "to match:   /%s/",
+					\ a:description, a:qgot, vimtap#Quote(a:got), a:re)
 	endif
 endfunction
 "### [ }}} ]
@@ -355,18 +421,19 @@ endfunction
 " Unlike is similar to Like, but the regular expression must not match.
 "
 " Example:
-"   call vimtap#Unlike(x, '^\s*$', "x contains non-whitespace")
+"   call vimtap#Unlike(x, '^\s*$', 'x', "x contains non-whitespace")
 "
 " Source:
-function! vimtap#Unlike(got, re, description)
+function! vimtap#Unlike(got, re, qgot, description)
 	let test_result = a:got !~ a:re
 
-	call vimtap#Ok(test_result, a:description)
+	call g:vimtap#TheHarness.ok(test_result, a:description)
 	if !test_result
 		call vimtap#Diag("Test '%s' failed:\n"
-					\ . "got: '%s'\n"
-					\ . "does match: /%s/",
-					\ a:description, vimtap#Quote(a:got), a:re)
+					\ . "expected:     %s\n"
+					\ . "with value:   %s\n"
+					\ . "to not match: /%s/",
+					\ a:description, a:qgot, vimtap#Quote(a:got), a:re)
 	endif
 endfunction
 "### [ }}} ]
@@ -385,7 +452,7 @@ endfunction
 "
 " Source:
 function! vimtap#Pass(description)
-	call vimtap#Ok(1, a:description)
+	call g:vimtap#TheHarness.ok(1, a:description)
 endfunction
 "### [ }}} ]
 "### FUNCTION vimtap#Fail [ {{{ ]
@@ -401,7 +468,7 @@ endfunction
 "
 " Source:
 function! vimtap#Fail(description)
-	call vimtap#Ok(0, a:description)
+	call g:vimtap#TheHarness.ok(0, a:description)
 endfunction
 "### [ }}} ]
 "### FUNCTION vimtap#Diag [ {{{ ]
@@ -473,6 +540,199 @@ endfunction
 function! vimtap#BailOut(reason)
 	call g:vimtap#TheHarness.bail_out(a:reason)
 endfunction
+"### [ }}} ]
+"##### [ }}} ]
+
+"##### COMMANDS [ {{{ ]
+"### COMMAND VimTapPrepareLocals [ {{{ ]
+" Description:
+" This is a private command used to remove locals used by Vimtap from the
+" calling context.
+"
+" DON'T USE FROM CLIENT CODE!
+"
+" Source:
+command! -nargs=* -bar VimTapPrepareLocals
+			\ for local in [ <f-args> ] |
+			\     if exists(local) |
+			\         execute "unlet" local |
+			\     endif |
+            \ endfor
+"### [ }}} ]
+"### COMMAND Ok [ {{{ ]
+" Description:
+" Do a vimtap#Ok assertion. Executes the given expression and checks for
+" its truthiness. Expressions containing whitespace must be wrapped in
+" parentheses.
+"
+" The description is optional.
+"
+" Example:
+"   Ok isFoo(x) "x is a Foo"
+"   Ok (bar(x, y)) "bar of x and y is true"
+"
+" Source:
+command! -nargs=1 Ok
+			\ VimTapPrepareLocals vimtapMore vimtapExpr vimtapDesc |
+			\ let [ vimtapExpr, vimtapMore ] = vimtap#ParseExpression(<q-args>) |
+			\ let vimtapDesc = vimtap#ParseDescription(vimtapMore) |
+			\ execute "call vimtap#Ok("
+			\ . vimtapExpr . ", "
+			\ . "\"" . escape(vimtapExpr, '\"') . "\", "
+			\ . vimtapDesc . ")" |
+			\ unlet vimtapMore vimtapExpr vimtapDesc
+"### [ }}} ]
+"### COMMAND Plan [ {{{ ]
+" Description:
+" Declare the plan of the test script.
+"
+" Example:
+"   Plan 4
+"
+" Source:
+command! -nargs=1 Plan call vimtap#Plan(<args>)
+"### [ }}} ]
+"### COMMAND Is [ {{{ ]
+" Description:
+" Do a vimtap#Is assertion. Compares the result of the expressions expected
+" and actual. The expressions are arbitrary vimscript expressions. Expressions
+" containing whitespace have to put into parentheses.
+"
+" The description is optional.
+"
+" Example:
+"   Is (x + 1) 5 "x is 4"
+"
+" Source:
+command! -nargs=1 Is
+			\ VimTapPrepareLocals vimtapMore vimtapActual vimtapExpected vimtapDesc |
+			\ let [ vimtapActual, vimtapMore ] = vimtap#ParseExpression(<q-args>) |
+			\ let [ vimtapExpected, vimtapMore ] = vimtap#ParseExpression(vimtapMore) |
+			\ let vimtapDesc = vimtap#ParseDescription(vimtapMore) |
+			\ execute "call vimtap#Is(" . vimtapActual . ", "
+			\ . vimtapExpected . ", "
+			\ . "\"" . escape(vimtapActual, '\"') . "\", "
+			\ . vimtapDesc . ")" |
+			\ unlet vimtapMore vimtapActual vimtapExpected vimtapDesc
+"### [ }}} ]
+"### COMMAND Isnt [ {{{ ]
+" Description:
+" Do a vimtap#Isnt assertion. Compares the result of the expressions unexpected
+" and actual. The expressions are arbitrary vimscript expressions. Expressions
+" containing whitespace have to put into parentheses.
+"
+" The description is optional.
+"
+" Example:
+"   Isnt (x + 1) 5 "x is not 4"
+"
+" Source:
+command! -nargs=1 Isnt
+			\ VimTapPrepareLocals vimtapMore vimtapActual vimtapUnexpected vimtapDesc |
+			\ let [ vimtapActual, vimtapMore ] = vimtap#ParseExpression(<q-args>) |
+			\ let [ vimtapUnexpected, vimtapMore ] = vimtap#ParseExpression(vimtapMore) |
+			\ let vimtapDesc = vimtap#ParseDescription(vimtapMore) |
+			\ execute "call vimtap#Isnt("
+			\ . vimtapActual . ", "
+			\ . vimtapUnexpected . ", "
+			\ . "\"" . escape(vimtapActual, '\"') . "\", "
+			\ . vimtapDesc . ")" |
+			\ unlet vimtapMore vimtapActual vimtapUnexpected vimtapDesc
+"### [ }}} ]
+"### COMMAND Like [ {{{ ]
+" Description:
+" Do a vimtap#Like assertion. Tries to match the expected expression with the
+" given regular expression. The expressions are arbitrary vimscript expressions.
+" Expressions containing whitespace have to put into parentheses.
+"
+" The description is optional.
+"
+" Example:
+"   Like ("1" . "2") '\d\d' "has two digits"
+"
+" Source:
+command! -nargs=1 Like
+			\ VimTapPrepareLocals vimtapMore vimtapActual vimtapExpr vimtapDesc |
+			\ let [ vimtapActual, vimtapMore ] = vimtap#ParseExpression(<q-args>) |
+			\ let [ vimtapExpr, vimtapMore ] = vimtap#ParseExpression(vimtapMore) |
+			\ let vimtapDesc = vimtap#ParseDescription(vimtapMore) |
+			\ execute "call vimtap#Like("
+			\ . vimtapActual . ", "
+			\ . vimtapExpr . ", "
+			\ . "\"" . escape(vimtapActual, '\"') . "\", "
+			\ . vimtapDesc . ")" |
+			\ unlet vimtapMore vimtapActual vimtapExpr vimtapDesc
+"### [ }}} ]
+"### COMMAND Unlike [ {{{ ]
+" Description:
+" Do a vimtap#Unlike assertion. Tries to match the expected expression with
+" the given regular expression and fails in case it actually matches. The
+" expressions are arbitrary vimscript expressions. Expressions containing
+" whitespace have to put into parentheses.
+"
+" The description is optional.
+"
+" Example:
+"   Unike ("A" . "B") '\d\d' "has not two digits"
+"
+" Source:
+command! -nargs=1 Unlike
+			\ VimTapPrepareLocals vimtapMore vimtapActual vimtapExpr vimtapDesc |
+			\ let [ vimtapActual, vimtapMore ] = vimtap#ParseExpression(<q-args>) |
+			\ let [ vimtapExpr, vimtapMore ] = vimtap#ParseExpression(vimtapMore) |
+			\ let vimtapDesc = vimtap#ParseDescription(vimtapMore) |
+			\ execute "call vimtap#Unlike("
+			\ . vimtapActual . ", "
+			\ . vimtapExpr . ", "
+			\ . "\"" . escape(vimtapActual, '\"') . "\", "
+			\ . vimtapDesc . ")" |
+			\ unlet vimtapMore vimtapActual vimtapExpr vimtapDesc
+"### [ }}} ]
+"### COMMAND Pass [ {{{ ]
+" Description:
+" Declare an always-pass assertion with the given description.
+"
+" Example:
+"   Pass "always pass"
+"
+" Source:
+command! -nargs=1 Pass call vimtap#Pass(<args>)
+"### [ }}} ]
+"### COMMAND Fail [ {{{ ]
+" Description:
+" Declare an always-fail assertion with the given description.
+"
+" Example:
+"   Fail "always fail"
+"
+" Source:
+command! -nargs=1 Fail call vimtap#Fail(<args>)
+"### [ }}} ]
+"### COMMAND Todo [ {{{ ]
+" Description:
+" Declare some of the following tests to be TODO.
+"
+" Example:
+"   Todo 5
+"
+" Source:
+command! -nargs=1 Todo call vimtap#Todo(<args>)
+"### [ }}} ]
+"### COMMAND BailOut [ {{{ ]
+" Description:
+" Bail out of the test script with the given message.
+"
+" Example:
+"   if (!RunningInVim())
+"       BailOut "Running under emacs! Arghh!"
+"   endif
+"
+" Note:
+" This function raises a "VimTAP:BailOut:" exception! Don't catch these
+" or all curses of ye olden dayes shall be cast upon thee!
+"
+" Source:
+command! -nargs=1 BailOut call vimtap#BailOut(<args>)
 "### [ }}} ]
 "##### [ }}} ]
 

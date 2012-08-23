@@ -1,5 +1,5 @@
 #! /bin/sh
-# Copyright (c) 2008,2009 Meikel Brandmeyer, Frankfurt am Main
+# Copyright (c) 2008-2012 Meikel Brandmeyer, Frankfurt am Main
 # 
 # All rights reserved.
 # 
@@ -26,19 +26,21 @@
 # tests from outside of vim.
 #
 
-if [ $# -ne 1 ]; then
-	echo "Usage: vtruntest.sh <test>"
+if [ $# -ne 2 ]; then
+	echo "Usage: vtruntest.sh <runtime> <test>"
 	exit 1
 fi
 
-test=$1
+rtp=$1
+test=$2
 testoutput=`mktemp -t vimtap`
 
 # XXX: In the following there is no need to "catch" the BailOut exception,
 # since vim reads from stdin. That means that each command comprises and own
 # "run", which is isolated from the others. If we would put the commands in
 # separate file and :source'd it, we would have needed the "catch".
-vim -E <<EOF
+vim -E -u NONE -i NONE -n -N <<EOF
+execute "let &runtimepath = '${rtp}," . &runtimepath . "'"
 call vimtap#SetOutputFile("${testoutput}")
 source ${test}
 call vimtap#FlushOutput()
